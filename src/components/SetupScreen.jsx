@@ -215,12 +215,12 @@ function initializeGroup(data) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-neutral-950 flex items-center justify-center p-4 md:p-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-neutral-950 flex flex-col p-4 md:p-8 relative">
       {/* Background radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(16,185,129,0.06),transparent_50%)] pointer-events-none" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_70%,rgba(59,130,246,0.04),transparent_50%)] pointer-events-none" />
 
-      <div className="w-full max-w-4xl bg-white/70 dark:bg-neutral-900/70 border border-neutral-200/50 dark:border-neutral-800/50 rounded-3xl shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col md:flex-row">
+      <div className="m-auto w-full max-w-4xl bg-white/70 dark:bg-neutral-900/70 border border-neutral-200/50 dark:border-neutral-800/50 rounded-3xl shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col md:flex-row relative z-10">
         
         {/* Step Guide Column (Left) */}
         <div className="flex-1 p-6 md:p-8 border-b md:border-b-0 md:border-r border-neutral-200/40 dark:border-neutral-800/40">

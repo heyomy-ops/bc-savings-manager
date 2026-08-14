@@ -24,25 +24,7 @@ export default function LoanCalculator() {
     .reduce((sum, t) => sum + t.amount, 0);
   const availableVaultBalance = Math.max(0, totalInflows - totalOutflows);
 
-  // Generate a standard 10-month repayment schedule
-  const generateSchedule = () => {
-    if (amount <= 0) return [];
-    const schedule = [];
-    const months = 10;
-    const monthlyPrincipal = amount / months;
-
-    for (let i = 1; i <= months; i++) {
-      schedule.push({
-        month: i,
-        principal: monthlyPrincipal,
-        interest: monthlyInterest,
-        total: monthlyPrincipal + monthlyInterest
-      });
-    }
-    return schedule;
-  };
-
-  const schedule = generateSchedule();
+  // No fixed schedule needed for indefinite loans
 
   const handleDisburseLoan = async (e) => {
     e.preventDefault();
@@ -146,14 +128,6 @@ export default function LoanCalculator() {
                 <span>Monthly Interest ({interestRate}%):</span>
                 <span className="font-semibold text-neutral-800 dark:text-neutral-200">₹{monthlyInterest.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
-                <span>Total Interest (10 months):</span>
-                <span className="font-semibold text-neutral-800 dark:text-neutral-200">₹{(monthlyInterest * 10).toLocaleString()}</span>
-              </div>
-              <div className="border-t border-emerald-100 dark:border-emerald-900/30 pt-2 flex justify-between text-sm font-bold text-emerald-800 dark:text-emerald-400">
-                <span>Total Repayable:</span>
-                <span>₹{(amount + (monthlyInterest * 10)).toLocaleString()}</span>
-              </div>
             </div>
           )}
 
@@ -188,41 +162,34 @@ export default function LoanCalculator() {
           </button>
         </form>
 
-        {/* Repayment Schedule Column */}
+        {/* Loan Terms Column */}
         <div className="lg:col-span-3 border-l border-neutral-100 dark:border-neutral-800 lg:pl-8 flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-3 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-emerald-500" />
-              Repayment Schedule (10 Months)
+              Loan Terms & Details
             </h3>
             {amount > 0 ? (
-              <div className="max-h-72 overflow-y-auto border border-neutral-100 dark:border-neutral-800/80 rounded-xl">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-100 dark:border-neutral-800 text-neutral-500 font-bold">
-                      <th className="py-2 px-3">Month</th>
-                      <th className="py-2 px-3 text-right">Principal</th>
-                      <th className="py-2 px-3 text-right">Interest (Flat)</th>
-                      <th className="py-2 px-3 text-right">Total Due</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/40 font-medium">
-                    {schedule.map((row) => (
-                      <tr key={row.month} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/10">
-                        <td className="py-2.5 px-3 text-neutral-600 dark:text-neutral-400">Month {row.month}</td>
-                        <td className="py-2.5 px-3 text-right text-neutral-800 dark:text-neutral-200">₹{row.principal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-2.5 px-3 text-right text-emerald-600 dark:text-emerald-400">₹{row.interest.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-white">₹{row.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-6 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-xl space-y-4">
+                <p className="text-sm text-neutral-700 dark:text-neutral-300">
+                  This loan has an <span className="font-bold text-emerald-600 dark:text-emerald-400">indefinite duration</span>. 
+                  The member can hold the principal amount as long as they need.
+                </p>
+                <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg shadow-sm border border-neutral-100 dark:border-neutral-800">
+                  <h4 className="text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1 uppercase tracking-wider">Required Monthly Payment (Interest)</h4>
+                  <div className="text-2xl font-black text-neutral-900 dark:text-white">
+                    ₹{monthlyInterest.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                    Due every month until the principal is repaid.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl bg-neutral-50/30 dark:bg-neutral-900/10">
                 <Calculator className="w-8 h-8 text-neutral-300 dark:text-neutral-700 mb-2" />
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 max-w-[200px]">
-                  Enter a loan amount to generate the repayment schedule.
+                  Enter a loan amount to generate loan terms.
                 </p>
               </div>
             )}

@@ -147,33 +147,62 @@ function addMember(member) {
 
 function addTransaction(tx) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Transactions");
+  const mainTxSheet = ss.getSheetByName("Transactions");
+  const membersSheet = ss.getSheetByName("Members");
   
   const id = Utilities.getUuid();
   const dateStr = new Date().toISOString();
   const amount = Number(tx.amount) || 0;
   
-  const newRow = [
-    id,
-    dateStr,
-    tx.member_id || "",
-    tx.type || "",
-    amount
-  ];
-  sheet.appendRow(newRow);
+  // 1. Save to the main log
+  const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
+  mainTxSheet.appendRow(newRow);
   
-  if (tx.type === "deposit" || tx.type === "principal_repayment") {
-    const membersSheet = ss.getSheetByName("Members");
-    const mValues = membersSheet.getDataRange().getValues();
-    
-    for (let i = 1; i < mValues.length; i++) {
-      if (mValues[i][0] === tx.member_id) {
-        const currentPaid = Number(mValues[i][4]) || 0;
-        membersSheet.getRange(i + 1, 5).setValue(currentPaid + amount);
-        break;
+  // 2. Find the Member's Name and update their total paid
+  let memberName = "Unknown Member";
+  let totalSavings = 0;
+  
+  const mValues = membersSheet.getDataRange().getValues();
+  for (let i = 1; i < mValues.length; i++) {
+    if (mValues[i][0] === tx.member_id) {
+      memberName = mValues[i][1];
+      const currentPaid = Number(mValues[i][4]) || 0;
+      
+      if (tx.type === "deposit" || tx.type === "principal_repayment") {
+        totalSavings = currentPaid + amount;
+        membersSheet.getRange(i + 1, 5).setValue(totalSavings);
+      } else {
+        totalSavings = currentPaid;
       }
+      break;
     }
   }
+  
+  // 3. Create or find the Member's specific Tab
+  const memberSheetName = "History - " + memberName;
+  let individualSheet = ss.getSheetByName(memberSheetName);
+  
+  if (!individualSheet) {
+    individualSheet = ss.insertSheet(memberSheetName);
+    individualSheet.appendRow(["Transaction ID", "Date", "Type", "Amount", "Total Savings Balance"]);
+    individualSheet.getRange("A1:E1").setFontWeight("bold"); 
+  }
+  
+  // 4. Add this transaction to their personal sheet
+  individualSheet.appendRow([id, dateStr, tx.type || "", amount, totalSavings]);
+  const newRowNum = individualSheet.getLastRow();
+  
+  // 5. Color coding based on transaction type
+  let hexColor = "#ffffff";
+  if (tx.type === "deposit" || tx.type === "principal_repayment") {
+    hexColor = "#dcfce7"; // light green
+  } else if (tx.type === "loan_disbursement") {
+    hexColor = "#fee2e2"; // light red
+  } else if (tx.type === "interest_payment" || tx.type === "penalty") {
+    hexColor = "#fef9c3"; // light yellow
+  }
+  
+  individualSheet.getRange(newRowNum, 1, 1, 5).setBackground(hexColor);
   
   return {
     id: id,

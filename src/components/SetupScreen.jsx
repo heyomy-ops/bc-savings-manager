@@ -12,6 +12,18 @@ export default function SetupScreen() {
 
   const scriptCode = `/**
  * BC Savings Group Manager - Google Apps Script Backend
+ * 
+ * Instructions:
+ * 1. Open your Google Sheet.
+ * 2. Click Extensions -> Apps Script.
+ * 3. Delete any default code and paste this script.
+ * 4. Click the Save icon (floppy disk).
+ * 5. Click "Deploy" -> "New Deployment".
+ * 6. Under select type, click the Gear icon and choose "Web App".
+ * 7. Set Description: "BC Manager API".
+ * 8. Set Execute as: "Me (your email)".
+ * 9. Set Who has access: "Anyone".
+ * 10. Click Deploy, authorize any permissions requested, and copy the Web App URL!
  */
 
 function doGet(e) {
@@ -23,10 +35,12 @@ function doGet(e) {
       settings: getSettingsData()
     };
     return ContentService.createTextOutput(JSON.stringify({ success: true, ...data }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
   }
 }
 
@@ -37,6 +51,7 @@ function doPost(e) {
     const action = payload.action;
     const data = payload.data;
     let result;
+    
     if (action === "add_member") result = addMember(data);
     else if (action === "add_transaction") result = addTransaction(data);
     else if (action === "update_settings") result = updateSettings(data);
@@ -44,10 +59,12 @@ function doPost(e) {
     else throw new Error("Unknown action: " + action);
     
     return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
   }
 }
 
@@ -83,16 +100,22 @@ function getSheetData(sheetName) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   const range = sheet.getDataRange();
   const values = range.getValues();
+  
   if (values.length <= 1) return [];
+  
   const headers = values[0];
   const list = [];
+  
   for (let i = 1; i < values.length; i++) {
     const row = {};
     for (let j = 0; j < headers.length; j++) {
       let val = values[i][j];
+      
+      // Parse numbers cleanly
       if (headers[j] === "monthly_commitment" || headers[j] === "total_paid_to_date" || headers[j] === "amount" || headers[j] === "value") {
         val = Number(val) || 0;
       }
+      
       row[headers[j]] = val;
     }
     list.push(row);
@@ -106,8 +129,10 @@ function getSettingsData() {
   rows.forEach(function(row) {
     settings[row.key] = Number(row.value) || 0;
   });
+  
   if (settings.interest_rate_percent === undefined) settings.interest_rate_percent = 2;
   if (settings.default_late_fee === undefined) settings.default_late_fee = 500;
+  
   return settings;
 }
 
@@ -115,41 +140,101 @@ function addMember(member) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Members");
   const id = Utilities.getUuid();
-  const newRow = [id, member.name || "", member.phone || "", Number(member.monthly_commitment) || 0, 0];
+  const newRow = [
+    id,
+    member.name || "",
+    member.phone || "",
+    Number(member.monthly_commitment) || 0,
+    0
+  ];
   sheet.appendRow(newRow);
-  return { id, name: member.name, phone: member.phone, monthly_commitment: member.monthly_commitment, total_paid_to_date: 0 };
+  return {
+    id: id,
+    name: member.name,
+    phone: member.phone,
+    monthly_commitment: member.monthly_commitment,
+    total_paid_to_date: 0
+  };
 }
 
 function addTransaction(tx) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Transactions");
+  const mainTxSheet = ss.getSheetByName("Transactions");
+  const membersSheet = ss.getSheetByName("Members");
+  
   const id = Utilities.getUuid();
   const dateStr = new Date().toISOString();
   const amount = Number(tx.amount) || 0;
-  const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
-  sheet.appendRow(newRow);
   
-  if (tx.type === "deposit" || tx.type === "principal_repayment") {
-    const membersSheet = ss.getSheetByName("Members");
-    const mValues = membersSheet.getDataRange().getValues();
-    for (let i = 1; i < mValues.length; i++) {
-      if (mValues[i][0] === tx.member_id) {
-        const currentPaid = Number(mValues[i][4]) || 0;
-        membersSheet.getRange(i + 1, 5).setValue(currentPaid + amount);
-        break;
+  // 1. Save to the main log
+  const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
+  mainTxSheet.appendRow(newRow);
+  
+  // 2. Find the Member's Name and update their total paid
+  let memberName = "Unknown Member";
+  let totalSavings = 0;
+  
+  const mValues = membersSheet.getDataRange().getValues();
+  for (let i = 1; i < mValues.length; i++) {
+    if (mValues[i][0] === tx.member_id) {
+      memberName = mValues[i][1];
+      const currentPaid = Number(mValues[i][4]) || 0;
+      
+      if (tx.type === "deposit" || tx.type === "principal_repayment") {
+        totalSavings = currentPaid + amount;
+        membersSheet.getRange(i + 1, 5).setValue(totalSavings);
+      } else {
+        totalSavings = currentPaid;
       }
+      break;
     }
   }
-  return { id, date: dateStr, member_id: tx.member_id, type: tx.type, amount };
+  
+  // 3. Create or find the Member's specific Tab
+  const memberSheetName = "History - " + memberName;
+  let individualSheet = ss.getSheetByName(memberSheetName);
+  
+  if (!individualSheet) {
+    individualSheet = ss.insertSheet(memberSheetName);
+    individualSheet.appendRow(["Transaction ID", "Date", "Type", "Amount", "Total Savings Balance"]);
+    individualSheet.getRange("A1:E1").setFontWeight("bold"); 
+  }
+  
+  // 4. Add this transaction to their personal sheet
+  individualSheet.appendRow([id, dateStr, tx.type || "", amount, totalSavings]);
+  const newRowNum = individualSheet.getLastRow();
+  
+  // 5. Color coding based on transaction type
+  let hexColor = "#ffffff";
+  if (tx.type === "deposit" || tx.type === "principal_repayment") {
+    hexColor = "#dcfce7"; // light green
+  } else if (tx.type === "loan_disbursement") {
+    hexColor = "#fee2e2"; // light red
+  } else if (tx.type === "interest_payment" || tx.type === "penalty") {
+    hexColor = "#fef9c3"; // light yellow
+  }
+  
+  individualSheet.getRange(newRowNum, 1, 1, 5).setBackground(hexColor);
+  
+  return {
+    id: id,
+    date: dateStr,
+    member_id: tx.member_id,
+    type: tx.type,
+    amount: amount
+  };
 }
 
 function updateSettings(settingsObj) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Settings");
   const values = sheet.getDataRange().getValues();
+  
   const keys = ["interest_rate_percent", "default_late_fee"];
+  
   keys.forEach(function(key) {
     if (settingsObj[key] === undefined) return;
+    
     let found = false;
     for (let i = 1; i < values.length; i++) {
       if (values[i][0] === key) {
@@ -158,8 +243,12 @@ function updateSettings(settingsObj) {
         break;
       }
     }
-    if (!found) sheet.appendRow([key, Number(settingsObj[key])]);
+    
+    if (!found) {
+      sheet.appendRow([key, Number(settingsObj[key])]);
+    }
   });
+  
   return settingsObj;
 }
 

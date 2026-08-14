@@ -35,12 +35,10 @@ function doGet(e) {
       settings: getSettingsData()
     };
     return ContentService.createTextOutput(JSON.stringify({ success: true, ...data }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -59,12 +57,10 @@ function doPost(e) {
     else throw new Error("Unknown action: " + action);
     
     return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -166,7 +162,7 @@ function addTransaction(tx) {
   const dateStr = new Date().toISOString();
   const amount = Number(tx.amount) || 0;
   
-  // 1. Save to the main log
+  // 1. Save to the main raw database log (Transactions)
   const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
   mainTxSheet.appendRow(newRow);
   
@@ -195,26 +191,45 @@ function addTransaction(tx) {
   let individualSheet = ss.getSheetByName(memberSheetName);
   
   if (!individualSheet) {
-    individualSheet = ss.insertSheet(memberSheetName);
-    individualSheet.appendRow(["Transaction ID", "Date", "Type", "Amount", "Total Savings Balance"]);
-    individualSheet.getRange("A1:E1").setFontWeight("bold"); 
+    try {
+      individualSheet = ss.insertSheet(memberSheetName);
+      individualSheet.appendRow(["Transaction ID", "Date", "Type", "Debit (Loan Out)", "Credit (Paid In)", "Total Savings Balance"]);
+      individualSheet.getRange("A1:F1").setFontWeight("bold"); 
+      individualSheet.hideColumns(1); // Hide Transaction ID for a cleaner look
+    } catch (e) {
+      // Catch race conditions or case-sensitivity issues
+      const sheets = ss.getSheets();
+      for (let s = 0; s < sheets.length; s++) {
+        if (sheets[s].getName().toLowerCase() === memberSheetName.toLowerCase()) {
+          individualSheet = sheets[s];
+          break;
+        }
+      }
+      if (!individualSheet) throw e;
+    }
   }
   
-  // 4. Add this transaction to their personal sheet
-  individualSheet.appendRow([id, dateStr, tx.type || "", amount, totalSavings]);
+  // 4. Calculate Debit/Credit
+  let debit = "";
+  let credit = "";
+  
+  if (tx.type === "deposit" || tx.type === "principal_repayment" || tx.type === "interest_payment" || tx.type === "penalty") {
+    credit = amount;
+  } else if (tx.type === "loan_disbursement") {
+    debit = amount;
+  }
+  
+  // 5. Add this transaction to the member's personal sheet
+  individualSheet.appendRow([id, dateStr, tx.type || "", debit, credit, totalSavings]);
   const newRowNum = individualSheet.getLastRow();
   
-  // 5. Color coding based on transaction type
-  let hexColor = "#ffffff";
-  if (tx.type === "deposit" || tx.type === "principal_repayment") {
-    hexColor = "#dcfce7"; // light green
-  } else if (tx.type === "loan_disbursement") {
-    hexColor = "#fee2e2"; // light red
-  } else if (tx.type === "interest_payment" || tx.type === "penalty") {
-    hexColor = "#fef9c3"; // light yellow
+  // 6. Text color coding (Red for Debit, Green for Credit)
+  if (debit !== "") {
+    individualSheet.getRange(newRowNum, 4).setFontColor("#ef4444").setFontWeight("bold"); // Red
   }
-  
-  individualSheet.getRange(newRowNum, 1, 1, 5).setBackground(hexColor);
+  if (credit !== "") {
+    individualSheet.getRange(newRowNum, 5).setFontColor("#22c55e").setFontWeight("bold"); // Green
+  }
   
   return {
     id: id,
@@ -312,7 +327,7 @@ function initializeGroup(data) {
       <div className="m-auto w-full max-w-4xl bg-white/70 dark:bg-neutral-900/70 border border-neutral-200/50 dark:border-neutral-800/50 rounded-3xl shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col md:flex-row relative z-10">
         
         {/* Step Guide Column (Left) */}
-        <div className="flex-1 p-6 md:p-8 border-b md:border-b-0 md:border-r border-neutral-200/40 dark:border-neutral-800/40">
+        <div className="flex-1 min-w-0 p-6 md:p-8 border-b md:border-b-0 md:border-r border-neutral-200/40 dark:border-neutral-800/40">
           <div className="flex items-center gap-2 mb-6">
             <span className="p-2 bg-emerald-600 rounded-xl text-white">
               <Database className="w-5 h-5" />
@@ -351,7 +366,7 @@ function initializeGroup(data) {
                     </>
                   )}
                 </button>
-                <pre className="p-3 bg-neutral-900 text-neutral-200 rounded-xl max-h-36 overflow-y-auto text-[10px] font-mono select-all">
+                <pre className="p-3 bg-neutral-900 text-neutral-200 rounded-xl max-h-36 overflow-x-auto overflow-y-auto text-[10px] font-mono select-all">
                   {scriptCode}
                 </pre>
               </div>
@@ -373,7 +388,7 @@ function initializeGroup(data) {
         </div>
 
         {/* Input & Action Column (Right) */}
-        <div className="flex-1 p-6 md:p-8 bg-neutral-50/50 dark:bg-neutral-900/30 flex flex-col justify-between">
+        <div className="flex-1 min-w-0 p-6 md:p-8 bg-neutral-50/50 dark:bg-neutral-900/30 flex flex-col justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900 dark:text-white mb-2">
               BC Manager Dashboard

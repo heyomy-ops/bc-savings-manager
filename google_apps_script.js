@@ -23,12 +23,10 @@ function doGet(e) {
       settings: getSettingsData()
     };
     return ContentService.createTextOutput(JSON.stringify({ success: true, ...data }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -47,12 +45,10 @@ function doPost(e) {
     else throw new Error("Unknown action: " + action);
     
     return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -154,7 +150,7 @@ function addTransaction(tx) {
   const dateStr = new Date().toISOString();
   const amount = Number(tx.amount) || 0;
   
-  // 1. Save to the main log
+  // 1. Save to the main raw database log (Transactions)
   const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
   mainTxSheet.appendRow(newRow);
   
@@ -183,26 +179,45 @@ function addTransaction(tx) {
   let individualSheet = ss.getSheetByName(memberSheetName);
   
   if (!individualSheet) {
-    individualSheet = ss.insertSheet(memberSheetName);
-    individualSheet.appendRow(["Transaction ID", "Date", "Type", "Amount", "Total Savings Balance"]);
-    individualSheet.getRange("A1:E1").setFontWeight("bold"); 
+    try {
+      individualSheet = ss.insertSheet(memberSheetName);
+      individualSheet.appendRow(["Transaction ID", "Date", "Type", "Debit (Loan Out)", "Credit (Paid In)", "Total Savings Balance"]);
+      individualSheet.getRange("A1:F1").setFontWeight("bold"); 
+      individualSheet.hideColumns(1); // Hide Transaction ID for a cleaner look
+    } catch (e) {
+      // Catch race conditions or case-sensitivity issues
+      const sheets = ss.getSheets();
+      for (let s = 0; s < sheets.length; s++) {
+        if (sheets[s].getName().toLowerCase() === memberSheetName.toLowerCase()) {
+          individualSheet = sheets[s];
+          break;
+        }
+      }
+      if (!individualSheet) throw e;
+    }
   }
   
-  // 4. Add this transaction to their personal sheet
-  individualSheet.appendRow([id, dateStr, tx.type || "", amount, totalSavings]);
+  // 4. Calculate Debit/Credit
+  let debit = "";
+  let credit = "";
+  
+  if (tx.type === "deposit" || tx.type === "principal_repayment" || tx.type === "interest_payment" || tx.type === "penalty") {
+    credit = amount;
+  } else if (tx.type === "loan_disbursement") {
+    debit = amount;
+  }
+  
+  // 5. Add this transaction to the member's personal sheet
+  individualSheet.appendRow([id, dateStr, tx.type || "", debit, credit, totalSavings]);
   const newRowNum = individualSheet.getLastRow();
   
-  // 5. Color coding based on transaction type
-  let hexColor = "#ffffff";
-  if (tx.type === "deposit" || tx.type === "principal_repayment") {
-    hexColor = "#dcfce7"; // light green
-  } else if (tx.type === "loan_disbursement") {
-    hexColor = "#fee2e2"; // light red
-  } else if (tx.type === "interest_payment" || tx.type === "penalty") {
-    hexColor = "#fef9c3"; // light yellow
+  // 6. Text color coding (Red for Debit, Green for Credit)
+  if (debit !== "") {
+    individualSheet.getRange(newRowNum, 4).setFontColor("#ef4444").setFontWeight("bold"); // Red
   }
-  
-  individualSheet.getRange(newRowNum, 1, 1, 5).setBackground(hexColor);
+  if (credit !== "") {
+    individualSheet.getRange(newRowNum, 5).setFontColor("#22c55e").setFontWeight("bold"); // Green
+  }
   
   return {
     id: id,

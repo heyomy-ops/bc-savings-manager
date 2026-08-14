@@ -3,16 +3,26 @@ import { useGroup } from "../context/GroupContext";
 import { Calculator, ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 export default function LoanCalculator() {
-  const { members, settings, executeTransaction } = useGroup();
+  const { members, settings, executeTransaction, transactions } = useGroup();
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [loanAmount, setLoanAmount] = useState("");
   const [disbursing, setDisbursing] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const selectedMember = members.find(m => m.id === selectedMemberId);
   const amount = Number(loanAmount) || 0;
   const interestRate = settings?.interest_rate_percent || 2;
   const monthlyInterest = amount * (interestRate / 100);
+
+  // Calculate available vault balance
+  const totalInflows = transactions
+    .filter(t => ["deposit", "principal_repayment", "interest_payment", "penalty"].includes(t.type))
+    .reduce((sum, t) => sum + t.amount, 0);
+  const totalOutflows = transactions
+    .filter(t => t.type === "loan_disbursement")
+    .reduce((sum, t) => sum + t.amount, 0);
+  const availableVaultBalance = Math.max(0, totalInflows - totalOutflows);
 
   // Generate a standard 10-month repayment schedule
   const generateSchedule = () => {
@@ -37,9 +47,14 @@ export default function LoanCalculator() {
   const handleDisburseLoan = async (e) => {
     e.preventDefault();
     if (!selectedMemberId || amount <= 0) return;
+    if (amount > availableVaultBalance) {
+      setErrorMsg("Insufficient vault balance to disburse this loan.");
+      return;
+    }
 
     setDisbursing(true);
     setSuccessMsg("");
+    setErrorMsg("");
     try {
       // 1. Post the loan disbursement transaction
       await executeTransaction({
@@ -48,9 +63,7 @@ export default function LoanCalculator() {
         amount: amount
       });
 
-      // 2. Also record the interest payment immediately as part of the bidding process (if flat interest is pre-deducted or committed)
-      // Note: According to the PRD, we just push the loan_disbursement transaction. Let's log it.
-      console.log(`Disbursed loan of ₹${amount} to ${selectedMember.name} at ${interestRate}% interest. Monthly interest is ₹${monthlyInterest}`);
+      // Note: Interest is now collected monthly on a cash-basis via the Checklist.
 
       setSuccessMsg(`Success! Disbursed ₹${amount.toLocaleString()} to ${selectedMember.name}.`);
       setLoanAmount("");
@@ -124,6 +137,12 @@ export default function LoanCalculator() {
           {amount > 0 && (
             <div className="bg-emerald-50 dark:bg-emerald-950/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30 space-y-2">
               <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
+                <span>Available Vault Balance:</span>
+                <span className={`font-semibold ${amount > availableVaultBalance ? 'text-red-600 dark:text-red-400' : 'text-neutral-800 dark:text-neutral-200'}`}>
+                  ₹{availableVaultBalance.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
                 <span>Monthly Interest ({interestRate}%):</span>
                 <span className="font-semibold text-neutral-800 dark:text-neutral-200">₹{monthlyInterest.toLocaleString()}</span>
               </div>
@@ -138,6 +157,13 @@ export default function LoanCalculator() {
             </div>
           )}
 
+          {errorMsg && (
+            <div className="flex items-center gap-2 p-3 bg-red-100 dark:bg-red-950/40 text-red-800 dark:text-red-400 rounded-lg text-xs font-semibold">
+              <CheckCircle2 className="w-4 h-4 shrink-0 hidden" />
+              {errorMsg}
+            </div>
+          )}
+
           {successMsg && (
             <div className="flex items-center gap-2 p-3 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 rounded-lg text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -147,7 +173,7 @@ export default function LoanCalculator() {
 
           <button
             type="submit"
-            disabled={disbursing || !selectedMemberId || amount <= 0}
+            disabled={disbursing || !selectedMemberId || amount <= 0 || amount > availableVaultBalance}
             className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-200 dark:disabled:bg-neutral-800 disabled:text-neutral-400 dark:disabled:text-neutral-600 text-white font-bold rounded-lg shadow-md transition flex items-center justify-center gap-2"
           >
             {disbursing ? (

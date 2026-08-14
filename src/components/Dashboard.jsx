@@ -1,24 +1,25 @@
 import React from "react";
 import { useGroup } from "../context/GroupContext";
 import { DollarSign, Percent, TrendingUp, ShieldAlert } from "lucide-react";
+import { getCurrentMonthStr } from "../utils/helpers";
 
 export default function Dashboard() {
   const { transactions } = useGroup();
 
-  // Get current month format (YYYY-MM)
-  const getCurrentMonthStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}`;
-  };
+
 
   const currentMonthStr = getCurrentMonthStr();
 
-  // Metric 1: Total Pool This Month (Sum of deposits in current month)
-  const totalPoolThisMonth = transactions
-    .filter(t => t.type === "deposit" && t.date.startsWith(currentMonthStr))
+  // Metric 1: Available Vault Balance (True Liquid Cash)
+  const totalInflows = transactions
+    .filter(t => ["deposit", "principal_repayment", "interest_payment", "penalty"].includes(t.type))
     .reduce((sum, t) => sum + t.amount, 0);
+  
+  const totalOutflows = transactions
+    .filter(t => t.type === "loan_disbursement")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const availableVaultBalance = Math.max(0, totalInflows - totalOutflows);
 
   // Metric 2: Total Active Loans (Sum of disbursements minus principal repayments)
   const totalDisbursements = transactions
@@ -38,12 +39,12 @@ export default function Dashboard() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      {/* Metric Card 1: Monthly Pool */}
+      {/* Metric Card 1: Available Vault Balance */}
       <div className="relative overflow-hidden p-6 rounded-2xl bg-white/70 dark:bg-neutral-900/70 border border-neutral-200/50 dark:border-neutral-800/50 shadow-xl backdrop-blur-md hover:scale-[1.02] transition-transform duration-300">
         <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl" />
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm font-semibold text-neutral-500 dark:text-neutral-400">
-            Pool This Month ({new Date().toLocaleString('default', { month: 'long' })})
+            Available Vault Balance
           </span>
           <div className="p-3 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <DollarSign className="w-5 h-5" />
@@ -51,10 +52,10 @@ export default function Dashboard() {
         </div>
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-extrabold text-neutral-900 dark:text-white">
-            ₹{totalPoolThisMonth.toLocaleString("en-IN")}
+            ₹{availableVaultBalance.toLocaleString("en-IN")}
           </span>
         </div>
-        <p className="text-xs text-neutral-400 mt-2">Sum of collected commitments</p>
+        <p className="text-xs text-neutral-400 mt-2">Total liquid cash ready to lend</p>
       </div>
 
       {/* Metric Card 2: Active Loans */}

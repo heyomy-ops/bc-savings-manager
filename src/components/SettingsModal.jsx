@@ -62,13 +62,13 @@ export default function SettingsModal({ isOpen, onClose }) {
       }
     };
 
-    if (!('closedBy' in HTMLDialogElement.prototype)) {
+    if (!('closedby' in HTMLDialogElement.prototype)) {
       dialog.addEventListener('click', handleBackdropClick);
     }
 
     return () => {
       dialog.removeEventListener('close', handleClose);
-      if (!('closedBy' in HTMLDialogElement.prototype)) {
+      if (!('closedby' in HTMLDialogElement.prototype)) {
         dialog.removeEventListener('click', handleBackdropClick);
       }
     };

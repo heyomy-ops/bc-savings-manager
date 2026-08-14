@@ -12,24 +12,24 @@ const INITIAL_MEMBERS = [
 ];
 
 const INITIAL_TRANSACTIONS = [
-  // Month 1 Deposits (June 2026)
-  { id: "t1", date: "2026-06-10T10:00:00.000Z", member_id: "m1", type: "deposit", amount: 2000 },
-  { id: "t2", date: "2026-06-11T11:00:00.000Z", member_id: "m2", type: "deposit", amount: 4000 },
-  { id: "t3", date: "2026-06-12T09:30:00.000Z", member_id: "m3", type: "deposit", amount: 3000 },
-  { id: "t4", date: "2026-06-14T14:00:00.000Z", member_id: "m4", type: "deposit", amount: 5000 },
+  // Month 1 Deposits (July 2026)
+  { id: "t1", date: "2026-07-10T10:00:00.000Z", member_id: "m1", type: "deposit", amount: 2000 },
+  { id: "t2", date: "2026-07-11T11:00:00.000Z", member_id: "m2", type: "deposit", amount: 4000 },
+  { id: "t3", date: "2026-07-12T09:30:00.000Z", member_id: "m3", type: "deposit", amount: 3000 },
+  { id: "t4", date: "2026-07-14T14:00:00.000Z", member_id: "m4", type: "deposit", amount: 5000 },
   
-  // Late fee transaction in June
-  { id: "t5", date: "2026-06-16T17:00:00.000Z", member_id: "m3", type: "penalty", amount: 500 },
+  // Late fee transaction in July
+  { id: "t5", date: "2026-07-16T17:00:00.000Z", member_id: "m3", type: "penalty", amount: 500 },
 
-  // Month 2 Deposits (July 2026)
-  { id: "t6", date: "2026-07-10T10:00:00.000Z", member_id: "m1", type: "deposit", amount: 2000 },
-  { id: "t7", date: "2026-07-11T12:00:00.000Z", member_id: "m2", type: "deposit", amount: 4000 },
-  { id: "t8", date: "2026-07-13T10:30:00.000Z", member_id: "m3", type: "deposit", amount: 3000 },
-  { id: "t9", date: "2026-07-14T15:00:00.000Z", member_id: "m4", type: "deposit", amount: 5000 },
+  // Month 2 Deposits (August 2026)
+  { id: "t6", date: "2026-08-10T10:00:00.000Z", member_id: "m1", type: "deposit", amount: 2000 },
+  { id: "t7", date: "2026-08-11T12:00:00.000Z", member_id: "m2", type: "deposit", amount: 4000 },
+  { id: "t8", date: "2026-08-13T10:30:00.000Z", member_id: "m3", type: "deposit", amount: 3000 },
+  { id: "t9", date: "2026-08-14T15:00:00.000Z", member_id: "m4", type: "deposit", amount: 5000 },
 
-  // A Loan in July
-  { id: "t10", date: "2026-07-15T11:00:00.000Z", member_id: "m1", type: "loan_disbursement", amount: 5000 },
-  { id: "t11", date: "2026-07-15T11:05:00.000Z", member_id: "m1", type: "interest_payment", amount: 100 }
+  // A Loan in August
+  { id: "t10", date: "2026-08-15T11:00:00.000Z", member_id: "m1", type: "loan_disbursement", amount: 5000 },
+  { id: "t11", date: "2026-08-15T11:05:00.000Z", member_id: "m1", type: "interest_payment", amount: 100 }
 ];
 
 const INITIAL_SETTINGS = {

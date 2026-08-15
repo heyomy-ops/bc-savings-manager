@@ -34,7 +34,7 @@ function doGet(e) {
 function doPost(e) {
   eval(getLibrary());
   return handleDoPost(e);
-}\`;
+}`;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(scriptCode);

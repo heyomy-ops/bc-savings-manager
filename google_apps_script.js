@@ -14,7 +14,7 @@
  * 10. Click Deploy, authorize any permissions requested, and copy the Web App URL!
  */
 
-function doGet(e) {
+function handleDoGet(e) {
   try {
     initSheets();
     const data = {
@@ -30,7 +30,7 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
+function handleDoPost(e) {
   try {
     initSheets();
     const payload = JSON.parse(e.postData.contents);

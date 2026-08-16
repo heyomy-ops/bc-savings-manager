@@ -22,7 +22,7 @@ export default function SetupScreen() {
  */
 
 function getLibrary() {
-  const url = 'https://raw.githubusercontent.com/heyomy-ops/bc-savings-manager/main/google_apps_script.js';
+  const url = 'https://raw.githubusercontent.com/heyomy-ops/bc-savings-manager/main/google_apps_script.js?v=' + Date.now();
   return UrlFetchApp.fetch(url).getContentText();
 }
 

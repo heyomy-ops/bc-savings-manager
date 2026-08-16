@@ -27,13 +27,11 @@ function getLibrary() {
 }
 
 function doGet(e) {
-  eval(getLibrary());
-  return handleDoGet(e);
+  return Function("e", getLibrary() + "; return handleDoGet(e);")(e);
 }
 
 function doPost(e) {
-  eval(getLibrary());
-  return handleDoPost(e);
+  return Function("e", getLibrary() + "; return handleDoPost(e);")(e);
 }`;
 
   const handleCopyCode = () => {

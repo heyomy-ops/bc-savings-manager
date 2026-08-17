@@ -21,6 +21,12 @@ export default function SetupScreen() {
  * 5. Copy the Web App URL and paste it in the dashboard!
  */
 
+function _forceScopes() {
+  // This dummy function tricks Google Apps Script into requesting 
+  // Spreadsheet permissions when you first authorize the app!
+  SpreadsheetApp.getActiveSpreadsheet();
+}
+
 function getLibrary() {
   const url = 'https://raw.githubusercontent.com/heyomy-ops/bc-savings-manager/main/google_apps_script.js?v=' + Date.now();
   return UrlFetchApp.fetch(url).getContentText();

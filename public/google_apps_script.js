@@ -1,0 +1,277 @@
+/**
+ * BC Savings Group Manager - Google Apps Script Backend
+ * 
+ * Instructions:
+ * 1. Open your Google Sheet.
+ * 2. Click Extensions -> Apps Script.
+ * 3. Delete any default code and paste this script.
+ * 4. Click the Save icon (floppy disk).
+ * 5. Click "Deploy" -> "New Deployment".
+ * 6. Under select type, click the Gear icon and choose "Web App".
+ * 7. Set Description: "BC Manager API".
+ * 8. Set Execute as: "Me (your email)".
+ * 9. Set Who has access: "Anyone".
+ * 10. Click Deploy, authorize any permissions requested, and copy the Web App URL!
+ */
+
+function handleDoGet(e) {
+  try {
+    initSheets();
+    const data = {
+      members: getSheetData("Members"),
+      transactions: getSheetData("Transactions"),
+      settings: getSettingsData()
+    };
+    return ContentService.createTextOutput(JSON.stringify({ success: true, ...data }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleDoPost(e) {
+  try {
+    initSheets();
+    const payload = JSON.parse(e.postData.contents);
+    const action = payload.action;
+    const data = payload.data;
+    let result;
+    
+    if (action === "add_member") result = addMember(data);
+    else if (action === "add_transaction") result = addTransaction(data);
+    else if (action === "update_settings") result = updateSettings(data);
+    else if (action === "initialize_group") result = initializeGroup(data);
+    else throw new Error("Unknown action: " + action);
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function checkHeaders(sheet, expectedHeaders) {
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(expectedHeaders);
+  } else {
+    const currentHeader = sheet.getRange(1, 1).getValue();
+    if (currentHeader !== expectedHeaders[0]) {
+      sheet.insertRowBefore(1);
+      sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
+    }
+  }
+}
+
+function initSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  let membersSheet = ss.getSheetByName("Members");
+  if (!membersSheet) membersSheet = ss.insertSheet("Members");
+  checkHeaders(membersSheet, ["id", "name", "phone", "monthly_commitment", "total_paid_to_date"]);
+  
+  let txSheet = ss.getSheetByName("Transactions");
+  if (!txSheet) txSheet = ss.insertSheet("Transactions");
+  checkHeaders(txSheet, ["id", "date", "member_id", "type", "amount"]);
+  
+  let settingsSheet = ss.getSheetByName("Settings");
+  if (!settingsSheet) settingsSheet = ss.insertSheet("Settings");
+  checkHeaders(settingsSheet, ["key", "value"]);
+}
+
+function getSheetData(sheetName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  if (values.length <= 1) return [];
+  
+  const headers = values[0];
+  const list = [];
+  
+  for (let i = 1; i < values.length; i++) {
+    const row = {};
+    for (let j = 0; j < headers.length; j++) {
+      let val = values[i][j];
+      
+      // Parse numbers cleanly
+      if (headers[j] === "monthly_commitment" || headers[j] === "total_paid_to_date" || headers[j] === "amount" || headers[j] === "value") {
+        val = Number(val) || 0;
+      }
+      
+      row[headers[j]] = val;
+    }
+    list.push(row);
+  }
+  return list;
+}
+
+function getSettingsData() {
+  const rows = getSheetData("Settings");
+  const settings = {};
+  rows.forEach(function(row) {
+    settings[row.key] = Number(row.value) || 0;
+  });
+  
+  if (settings.interest_rate_percent === undefined) settings.interest_rate_percent = 2;
+  if (settings.default_late_fee === undefined) settings.default_late_fee = 500;
+  
+  return settings;
+}
+
+function addMember(member) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Members");
+  const id = Utilities.getUuid();
+  const newRow = [
+    id,
+    member.name || "",
+    member.phone || "",
+    Number(member.monthly_commitment) || 0,
+    0
+  ];
+  sheet.appendRow(newRow);
+  return {
+    id: id,
+    name: member.name,
+    phone: member.phone,
+    monthly_commitment: member.monthly_commitment,
+    total_paid_to_date: 0
+  };
+}
+
+function addTransaction(tx) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mainTxSheet = ss.getSheetByName("Transactions");
+  const membersSheet = ss.getSheetByName("Members");
+  
+  const id = Utilities.getUuid();
+  const dateStr = new Date().toISOString();
+  const amount = Number(tx.amount) || 0;
+  
+  // 1. Save to the main raw database log (Transactions)
+  const newRow = [id, dateStr, tx.member_id || "", tx.type || "", amount];
+  mainTxSheet.appendRow(newRow);
+  
+  // 2. Find the Member's Name and update their total paid
+  let memberName = "Unknown Member";
+  let totalSavings = 0;
+  
+  const mValues = membersSheet.getDataRange().getValues();
+  for (let i = 1; i < mValues.length; i++) {
+    if (mValues[i][0] === tx.member_id) {
+      memberName = mValues[i][1];
+      const currentPaid = Number(mValues[i][4]) || 0;
+      
+      if (tx.type === "deposit" || tx.type === "principal_repayment") {
+        totalSavings = currentPaid + amount;
+        membersSheet.getRange(i + 1, 5).setValue(totalSavings);
+      } else {
+        totalSavings = currentPaid;
+      }
+      break;
+    }
+  }
+  
+  // 3. Create or find the Member's specific Tab
+  const memberSheetName = "History - " + memberName;
+  let individualSheet = ss.getSheetByName(memberSheetName);
+  
+  if (!individualSheet) {
+    try {
+      individualSheet = ss.insertSheet(memberSheetName);
+      individualSheet.appendRow(["Transaction ID", "Date", "Type", "Debit (Loan Out)", "Credit (Paid In)", "Total Savings Balance"]);
+      individualSheet.getRange("A1:F1").setFontWeight("bold"); 
+      individualSheet.hideColumns(1); // Hide Transaction ID for a cleaner look
+    } catch (e) {
+      // Catch race conditions or case-sensitivity issues
+      const sheets = ss.getSheets();
+      for (let s = 0; s < sheets.length; s++) {
+        if (sheets[s].getName().toLowerCase() === memberSheetName.toLowerCase()) {
+          individualSheet = sheets[s];
+          break;
+        }
+      }
+      if (!individualSheet) throw e;
+    }
+  }
+  
+  // 4. Calculate Debit/Credit
+  let debit = "";
+  let credit = "";
+  
+  if (tx.type === "deposit" || tx.type === "principal_repayment" || tx.type === "interest_payment" || tx.type === "penalty") {
+    credit = amount;
+  } else if (tx.type === "loan_disbursement") {
+    debit = amount;
+  }
+  
+  // 5. Add this transaction to the member's personal sheet
+  individualSheet.appendRow([id, dateStr, tx.type || "", debit, credit, totalSavings]);
+  const newRowNum = individualSheet.getLastRow();
+  
+  // 6. Text color coding (Red for Debit, Green for Credit)
+  if (debit !== "") {
+    individualSheet.getRange(newRowNum, 4).setFontColor("#ef4444").setFontWeight("bold"); // Red
+  }
+  if (credit !== "") {
+    individualSheet.getRange(newRowNum, 5).setFontColor("#22c55e").setFontWeight("bold"); // Green
+  }
+  
+  return {
+    id: id,
+    date: dateStr,
+    member_id: tx.member_id,
+    type: tx.type,
+    amount: amount
+  };
+}
+
+function updateSettings(settingsObj) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Settings");
+  const values = sheet.getDataRange().getValues();
+  
+  const keys = ["interest_rate_percent", "default_late_fee"];
+  
+  keys.forEach(function(key) {
+    if (settingsObj[key] === undefined) return;
+    
+    let found = false;
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] === key) {
+        sheet.getRange(i + 1, 2).setValue(Number(settingsObj[key]));
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      sheet.appendRow([key, Number(settingsObj[key])]);
+    }
+  });
+  
+  return settingsObj;
+}
+
+function initializeGroup(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  const settingsSheet = ss.getSheetByName("Settings");
+  settingsSheet.appendRow(["group_name", data.settings.group_name]);
+  settingsSheet.appendRow(["duration_months", data.settings.duration_months]);
+  settingsSheet.appendRow(["interest_rate_percent", data.settings.interest_rate_percent]);
+  settingsSheet.appendRow(["default_late_fee", data.settings.default_late_fee]);
+  
+  const membersSheet = ss.getSheetByName("Members");
+  const membersData = [];
+  data.members.forEach(function(member) {
+    const id = Utilities.getUuid();
+    membersSheet.appendRow([id, member.name, member.phone, Number(member.monthly_commitment) || 0, 0]);
+    membersData.push({ id: id, name: member.name, phone: member.phone, monthly_commitment: member.monthly_commitment, total_paid_to_date: 0 });
+  });
+  
+  return { success: true, members: membersData };
+}
+

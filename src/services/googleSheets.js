@@ -88,12 +88,22 @@ export const googleSheetsService = {
     if (!url) throw new Error("Spreadsheet Script URL is required");
     try {
       const response = await fetch(url);
-      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      }
+      const text = await response.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        console.error("Failed to parse response as JSON. Raw response:", text.substring(0, 200));
+        throw new Error("Invalid response format. Make sure the URL ends in /exec and the script returned JSON. Raw: " + text.substring(0, 50) + "...");
+      }
       if (!json.success) throw new Error(json.error || "Invalid response from spreadsheet script");
       return true;
     } catch (err) {
-      console.error("Test connection error", err);
-      throw new Error("Unable to connect. Please verify the URL is correct and deployed with 'Anyone' access.");
+      console.error("Test connection error:", err);
+      throw new Error(err.message || "Unable to connect. Please verify the URL is correct and deployed with 'Anyone' access.");
     }
   },
 

@@ -1,41 +1,10 @@
 import React from "react";
 import { useGroup } from "../context/GroupContext";
 import { DollarSign, Percent, TrendingUp, ShieldAlert } from "lucide-react";
-import { getCurrentMonthStr } from "../utils/helpers";
 
 export default function Dashboard() {
-  const { transactions } = useGroup();
-
-
-
-  const currentMonthStr = getCurrentMonthStr();
-
-  // Metric 1: Available Vault Balance (True Liquid Cash)
-  const totalInflows = transactions
-    .filter(t => ["deposit", "principal_repayment", "interest_payment", "penalty"].includes(t.type))
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const totalOutflows = transactions
-    .filter(t => t.type === "loan_disbursement")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const availableVaultBalance = Math.max(0, totalInflows - totalOutflows);
-
-  // Metric 2: Total Active Loans (Sum of disbursements minus principal repayments)
-  const totalDisbursements = transactions
-    .filter(t => t.type === "loan_disbursement")
-    .reduce((sum, t) => sum + t.amount, 0);
-    
-  const totalRepayments = transactions
-    .filter(t => t.type === "principal_repayment")
-    .reduce((sum, t) => sum + t.amount, 0);
-    
-  const totalActiveLoans = Math.max(0, totalDisbursements - totalRepayments);
-
-  // Metric 3: Interest & Penalty Fund (Sum of interest + penalty transactions)
-  const totalProfitPool = transactions
-    .filter(t => t.type === "interest_payment" || t.type === "penalty")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const { derivedMetrics } = useGroup();
+  const { availableVaultBalance = 0, totalActiveLoans = 0, totalProfitPool = 0 } = derivedMetrics || {};
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

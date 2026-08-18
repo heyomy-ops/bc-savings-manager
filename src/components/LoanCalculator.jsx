@@ -3,7 +3,7 @@ import { useGroup } from "../context/GroupContext";
 import { Calculator, ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 export default function LoanCalculator() {
-  const { members, settings, executeTransaction, transactions } = useGroup();
+  const { members, settings, executeTransaction, derivedMetrics } = useGroup();
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [loanAmount, setLoanAmount] = useState("");
   const [disbursing, setDisbursing] = useState(false);
@@ -15,14 +15,7 @@ export default function LoanCalculator() {
   const interestRate = settings?.interest_rate_percent || 2;
   const monthlyInterest = amount * (interestRate / 100);
 
-  // Calculate available vault balance
-  const totalInflows = transactions
-    .filter(t => ["deposit", "principal_repayment", "interest_payment", "penalty"].includes(t.type))
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalOutflows = transactions
-    .filter(t => t.type === "loan_disbursement")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const availableVaultBalance = Math.max(0, totalInflows - totalOutflows);
+  const availableVaultBalance = derivedMetrics?.availableVaultBalance || 0;
 
   // No fixed schedule needed for indefinite loans
 

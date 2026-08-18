@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
+import React, { createContext, useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { googleSheetsService } from "../services/googleSheets";
 
 const GroupContext = createContext();
@@ -23,7 +23,7 @@ export const GroupProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   // Fetch initial data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const currentUrl = localStorage.getItem("bc_google_script_url");
     if (!currentUrl) {
       setLoading(false);
@@ -43,14 +43,14 @@ export const GroupProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, [scriptUrl]);
+  }, [scriptUrl, fetchData]);
 
   // Post transaction
-  const executeTransaction = async (txData) => {
+  const executeTransaction = useCallback(async (txData) => {
     try {
       const newTx = await googleSheetsService.addTransaction(txData);
       
@@ -73,10 +73,10 @@ export const GroupProvider = ({ children }) => {
       console.error("Transaction failed", err);
       throw new Error(err.message || "Failed to record transaction. Please try again.");
     }
-  };
+  }, []);
 
   // Update Settings
-  const saveSettings = async (newSettings) => {
+  const saveSettings = useCallback(async (newSettings) => {
     try {
       const saved = await googleSheetsService.updateSettings(newSettings);
       setSettings(saved);
@@ -85,10 +85,10 @@ export const GroupProvider = ({ children }) => {
       console.error("Saving settings failed", err);
       throw new Error(err.message || "Failed to save settings. Please try again.");
     }
-  };
+  }, []);
 
   // Save / Update Google Apps Script URL
-  const saveScriptUrl = (url) => {
+  const saveScriptUrl = useCallback((url) => {
     if (url) {
       localStorage.setItem("bc_google_script_url", url);
     } else {
@@ -98,9 +98,42 @@ export const GroupProvider = ({ children }) => {
       setTransactions([]);
     }
     setScriptUrl(url || "");
-  };
+  }, []);
 
-  const value = {
+  // Calculate Derived Metrics Memoized
+  const derivedMetrics = useMemo(() => {
+    const inflows = transactions
+      .filter(t => ["deposit", "principal_repayment", "interest_payment", "penalty"].includes(t.type))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const outflows = transactions
+      .filter(t => t.type === "loan_disbursement")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const availableVaultBalance = Math.max(0, inflows - outflows);
+
+    const totalDisbursements = transactions
+      .filter(t => t.type === "loan_disbursement")
+      .reduce((sum, t) => sum + t.amount, 0);
+      
+    const totalRepayments = transactions
+      .filter(t => t.type === "principal_repayment")
+      .reduce((sum, t) => sum + t.amount, 0);
+      
+    const totalActiveLoans = Math.max(0, totalDisbursements - totalRepayments);
+
+    const totalProfitPool = transactions
+      .filter(t => t.type === "interest_payment" || t.type === "penalty")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    return {
+      availableVaultBalance,
+      totalActiveLoans,
+      totalProfitPool
+    };
+  }, [transactions]);
+
+  const value = useMemo(() => ({
     scriptUrl,
     saveScriptUrl,
     members,
@@ -110,8 +143,21 @@ export const GroupProvider = ({ children }) => {
     error,
     refreshData: fetchData,
     executeTransaction,
-    saveSettings
-  };
+    saveSettings,
+    derivedMetrics
+  }), [
+    scriptUrl,
+    saveScriptUrl,
+    members,
+    transactions,
+    settings,
+    loading,
+    error,
+    fetchData,
+    executeTransaction,
+    saveSettings,
+    derivedMetrics
+  ]);
 
   return <GroupContext.Provider value={value}>{children}</GroupContext.Provider>;
 };
